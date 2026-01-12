@@ -15,59 +15,8 @@ import axios from "axios";
 // Importujemy osmtogeojson – konwertuje dane OpenStreetMap (OSM) na format GeoJSON
 import osmtogeojson from "osmtogeojson";
 
-// ---- TYPY DANYCH ----
-
-// Typy obiektów wojskowych, które będziemy pobierać z OpenStreetMap
-// Dzięki TypeScript możemy jasno określić, jakie wartości są dozwolone
-type MilitaryType =
-  | "barracks"
-  | "naval_base"
-  | "airfield"
-  | "training_area"
-  | "yes"
-  | "range"
-  | "primary"
-  | "office"
-  | "danger_area"
-  | "checkpoint"
-  | "shelter"
-  | "bunker";
-
-// Typ dla danych GeoJSON (osmtogeojson zwraca obiekt zgodny ze specyfikacją GeoJSON)
-type GeoJSONData = GeoJSON.FeatureCollection;
-
-// ---- LISTA TYPÓW ----
-// Tablica dostępnych typów obiektów wojskowych
-const MILITARY_TYPES: MilitaryType[] = [
-  "barracks",
-  "naval_base",
-  "airfield",
-  "training_area",
-  "yes",
-  "range",
-  "primary",
-  "office",
-  "danger_area",
-  "checkpoint",
-  "shelter",
-];
-
-// ---- ETYKIETY ----
-// Mapowanie typów obiektów na czytelne etykiety w języku polskim
-const MILITARY_LABELS: Record<MilitaryType, string> = {
-  barracks: "Koszary",
-  naval_base: "Baza morska",
-  airfield: "Lotnisko wojskowe",
-  training_area: "Poligon",
-  yes: "Obiekt wojskowy",
-  range: "Strzelnica / teren ćwiczeń",
-  primary: "Obiekt główny",
-  office: "Biuro wojskowe",
-  danger_area: "Strefa niebezpieczna",
-  checkpoint: "Punkt kontrolny",
-  shelter: "Schron",
-  bunker: "Bunkier",
-};
+import { MILITARY_TYPES, MILITARY_LABELS } from "./constants/military";
+import type { MilitaryType, GeoJSONData } from "./types/military";
 
 // ---- KOMPONENT GŁÓWNY ----
 export default function MilitaryOSMLayer() {
