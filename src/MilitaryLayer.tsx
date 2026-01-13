@@ -12,7 +12,6 @@ import { GeoJSON, useMap } from "react-leaflet";
 // Importujemy axios – bibliotekę do wykonywania zapytań HTTP (np. pobierania danych z API)
 import axios from "axios";
 
-// Importujemy osmtogeojson – konwertuje dane OpenStreetMap (OSM) na format GeoJSON
 import osmtogeojson from "osmtogeojson";
 
 import { MILITARY_TYPES, MILITARY_LABELS } from "./constants/military";
@@ -35,46 +34,64 @@ export default function MilitaryOSMLayer() {
   // map – dostęp do instancji mapy Leaflet
   const map = useMap();
 
-  // ---- FUNKCJA POBIERANIA DANYCH ----
-  const fetchData = async (type: MilitaryType) => {
-    setLoading(true); // pokaż loader
-    setData(null);    // usuń starą warstwę natychmiast
+  // cache na wszystkie typy
+  const cacheRef = useRef<Record<MilitaryType, GeoJSONData | null>>({});
 
-    // Zapytanie w języku Overpass QL (specjalny język do pobierania danych z OpenStreetMap)
+  const fetchLayer = async (type: MilitaryType) => {
     const query = `
-      [out:json][timeout:60];
-      area["ISO3166-1"="DE"]->.a;
-      (
-        way["military"="${type}"](area.a);
-        relation["military"="${type}"](area.a);
-      );
-      out geom;
-    `;
+    [out:json][timeout:60];
+    area["ISO3166-1"="PL"]->.a;
+    (
+      way["military"="${type}"](area.a);
+      relation["military"="${type}"](area.a);
+    );
+    out geom;
+  `;
 
-    // Tworzymy URL do API Overpass
     const url =
       "https://overpass.kumi.systems/api/interpreter?data=" +
       encodeURIComponent(query);
 
-    try {
-      // Pobieramy dane z API
-      const res = await axios.get(url);
-
-      // Konwertujemy dane OSM na GeoJSON
-      const geojson: GeoJSONData = osmtogeojson(res.data);
-
-      // Zapisujemy dane w stanie
-      setData(geojson);
-    } catch (e) {
-      console.error("Błąd Overpass:", e);
-    } finally {
-      setLoading(false); // ukryj loader
-    }
+    const res = await axios.get(url);
+    return osmtogeojson(res.data);
   };
+
+  // Współbieżne pobranie wszystkich warstw
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAll = async () => {
+      setLoading(true);
+
+      const promises = MILITARY_TYPES.map(async (type) => {
+        const geo = await fetchLayer(type);
+        return { type, geo };
+      });
+
+      const results = await Promise.all(promises);
+
+      if (!cancelled) {
+        results.forEach(({ type, geo }) => {
+          cacheRef.current[type] = geo;
+        });
+        setLoading(false);
+        setData(cacheRef.current[militaryType] || null);
+      }
+    };
+
+    loadAll();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ---- useEffect: pobieranie danych przy zmianie typu ----
   useEffect(() => {
-    fetchData(militaryType);
+    const cached = cacheRef.current[militaryType];
+    if (cacheRef) {
+      setData(cached);
+    }
   }, [militaryType]);
 
   // ---- useEffect: dopasowanie widoku mapy do danych ----
