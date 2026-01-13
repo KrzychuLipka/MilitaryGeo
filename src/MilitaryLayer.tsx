@@ -12,7 +12,6 @@ import { GeoJSON, useMap } from "react-leaflet";
 // Importujemy axios – bibliotekę do wykonywania zapytań HTTP (np. pobierania danych z API)
 import axios from "axios";
 
-// Importujemy osmtogeojson – konwertuje dane OpenStreetMap (OSM) na format GeoJSON
 import osmtogeojson from "osmtogeojson";
 
 import { MILITARY_TYPES, MILITARY_LABELS } from "./constants/military";
