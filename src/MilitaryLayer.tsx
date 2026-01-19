@@ -1,62 +1,30 @@
-// Importujemy hooki z Reacta:
-// - useEffect: pozwala uruchamiać dodatkowy kod po wyrenderowaniu komponentu lub gdy zmieniają się dane
-// - useState: pozwala komponentowi zapamiętać stan (np. wybrany typ obiektu wojskowego)
-// - useRef: pozwala przechowywać referencję do elementu (np. warstwy GeoJSON)
 import { useEffect, useState, useRef } from "react";
-
-// Importujemy komponent GeoJSON i hook useMap z react-leaflet:
-// - GeoJSON: pozwala wyświetlać dane geograficzne w formacie GeoJSON na mapie
-// - useMap: daje dostęp do instancji mapy Leaflet
 import { GeoJSON, useMap } from "react-leaflet";
-
-// Importujemy axios – bibliotekę do wykonywania zapytań HTTP (np. pobierania danych z API)
-import axios from "axios";
-
-import osmtogeojson from "osmtogeojson";
 
 import { MILITARY_TYPES, MILITARY_LABELS } from "./constants/military";
 import type { MilitaryType, GeoJSONData } from "./types/military";
 
 // ---- KOMPONENT GŁÓWNY ----
 export default function MilitaryOSMLayer() {
-  // militaryType – aktualnie wybrany typ obiektu wojskowego
   const [militaryType, setMilitaryType] = useState<MilitaryType>("barracks");
-
-  // data – przechowuje pobrane dane w formacie GeoJSON
   const [data, setData] = useState<GeoJSONData | null>(null);
-
-  // loading – informacja, czy trwa pobieranie danych
   const [loading, setLoading] = useState<boolean>(false);
 
-  // layerRef – referencja do warstwy GeoJSON, aby móc np. ustawić widok mapy na jej granice
   const layerRef = useRef<L.GeoJSON | null>(null);
-
-  // map – dostęp do instancji mapy Leaflet
   const map = useMap();
 
   // cache na wszystkie typy
-  const cacheRef = useRef<Record<MilitaryType, GeoJSONData | null>>({});
+  const cacheRef = useRef<Record<MilitaryType, GeoJSONData | null>>({} as any);
 
-  const fetchLayer = async (type: MilitaryType) => {
-    const query = `
-    [out:json][timeout:60];
-    area["ISO3166-1"="PL"]->.a;
-    (
-      way["military"="${type}"](area.a);
-      relation["military"="${type}"](area.a);
-    );
-    out geom;
-  `;
-
-    const url =
-      "https://overpass.kumi.systems/api/interpreter?data=" +
-      encodeURIComponent(query);
-
-    const res = await axios.get(url);
-    return osmtogeojson(res.data);
+  // ---- NOWA FUNKCJA: pobieranie z lokalnych plików ----
+  const fetchLocalLayer = async (type: MilitaryType) => {
+    const url = `/data/${type}.json`; // zakładamy 1:1 nazwy plików
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Nie można załadować pliku: ${url}`);
+    return (await res.json()) as GeoJSONData;
   };
 
-  // Współbieżne pobranie wszystkich warstw
+  // ---- Współbieżne ładowanie wszystkich warstw z plików ----
   useEffect(() => {
     let cancelled = false;
 
@@ -64,7 +32,7 @@ export default function MilitaryOSMLayer() {
       setLoading(true);
 
       const promises = MILITARY_TYPES.map(async (type) => {
-        const geo = await fetchLayer(type);
+        const geo = await fetchLocalLayer(type);
         return { type, geo };
       });
 
@@ -74,6 +42,7 @@ export default function MilitaryOSMLayer() {
         results.forEach(({ type, geo }) => {
           cacheRef.current[type] = geo;
         });
+
         setLoading(false);
         setData(cacheRef.current[militaryType] || null);
       }
@@ -86,31 +55,27 @@ export default function MilitaryOSMLayer() {
     };
   }, []);
 
-  // ---- useEffect: pobieranie danych przy zmianie typu ----
+  // ---- Zmiana typu → pobranie z cache ----
   useEffect(() => {
     const cached = cacheRef.current[militaryType];
-    if (cacheRef) {
+    if (cached) {
       setData(cached);
     }
   }, [militaryType]);
 
-  // ---- useEffect: dopasowanie widoku mapy do danych ----
+  // ---- Dopasowanie widoku mapy ----
   useEffect(() => {
     if (!data || !layerRef.current) return;
 
-    // Obliczamy granice warstwy GeoJSON
     const bounds = layerRef.current.getBounds();
-
-    // Jeśli granice są poprawne, dopasowujemy widok mapy
     if (bounds.isValid()) {
       map.fitBounds(bounds, { animate: true });
     }
   }, [data, map]);
 
-  // ---- RENDEROWANIE ----
+  // ---- RENDER ----
   return (
     <>
-      {/* ---- LOADER ---- */}
       {loading && (
         <div
           style={{
@@ -133,7 +98,6 @@ export default function MilitaryOSMLayer() {
         </div>
       )}
 
-      {/* ---- PRZYCISKI ---- */}
       <div
         style={{
           position: "absolute",
@@ -145,18 +109,17 @@ export default function MilitaryOSMLayer() {
           borderRadius: "8px",
           boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
           width: "80vw",
-          marginLeft: "48px"
+          marginLeft: "48px",
         }}
       >
         <div style={{ fontWeight: "bold", marginBottom: "6px" }}>
           Typ obiektu wojskowego:
         </div>
 
-        {/* Generujemy przyciski dla każdego typu */}
         {MILITARY_TYPES.map((type) => (
           <button
             key={type}
-            onClick={() => setMilitaryType(type)} // zmiana typu
+            onClick={() => setMilitaryType(type)}
             style={{
               margin: "4px",
               padding: "6px 10px",
@@ -172,18 +135,17 @@ export default function MilitaryOSMLayer() {
         ))}
       </div>
 
-      {/* ---- WARSTWA GEOJSON ---- */}
       {data && (
         <GeoJSON
-          key={militaryType} // wymusza przeładowanie warstwy przy zmianie typu
-          data={data}        // dane GeoJSON
-          ref={layerRef}     // referencja do warstwy
+          key={militaryType}
+          data={data}
+          ref={layerRef}
           style={() => ({
-            color: "#ff0000",     // kolor linii
-            weight: 6,            // grubość linii
-            opacity: 1,           // intensywność koloru
-            fillColor: "#ff0000", // kolor wypełnienia
-            fillOpacity: 0.45,    // przezroczystość wypełnienia
+            color: "#ff0000",
+            weight: 6,
+            opacity: 1,
+            fillColor: "#ff0000",
+            fillOpacity: 0.45,
           })}
         />
       )}
